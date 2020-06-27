@@ -138,20 +138,24 @@ def batch_populate_primary_keys(
 ):
     """Query for and populate the primary keys for all models in new_models with integer `id` primary keys.
 
-    This uses the database id sequence to populate the id field for new_models with an integer `id`
+    This uses the database id sequence to populate the id field for new_models with an integer
     primary key.
 
-    :param skip_unsupported_models: Skip models that do not have auto-incrementing single `id` primary keys.
+    :param skip_unsupported_models: Skip models that do not have auto-incrementing single primary keys.
                                     Raises an AssertionError for models with other primary keys.
     :param skip_if_single_model: Skips if there's only one model in `new_models`. Useful for avoiding an
                                  additional query from performing the nextval query.
+    :param column: If given, require that the primary key column match.  If 'None' then the primary key
+                   is used.
     """
     for base_mapper, models in _group_models_by_base_mapper(new_models):
+        if not column and base_mapper.primary_key:
+            column = base_mapper.primary_key[0].name
         if not _has_normal_id_primary_key(base_mapper, column=column):
             if skip_unsupported_models:
                 continue
             else:
-                raise AssertionError("Expected models to have auto-incrementing `id` primary key")
+                raise AssertionError("Expected models to have auto-incrementing primary key")
 
         # In general, batch_populate_primary_keys shouldn't assume anything about how people are creating
         # models - it is possible for models to have their ids already specified.
@@ -183,6 +187,7 @@ def enable_batch_inserting(sqla_session, column="id"):
     together and send them to the database together (in groups of 100 by default).
 
     To actually allow execute_batch_mode to do grouping well, we need to do two things:
+
     1) Ensure that models already have their primary keys specified, and are not relying on the database
        to specify these with e.g. autoincrement. SQLAlchemy uses `RETURNING id` to get the
        primary key of a newly created model, but cannot use RETURNING when doing batched inserts. See
@@ -190,6 +195,9 @@ def enable_batch_inserting(sqla_session, column="id"):
 
     2) Order model creation so that models of the same type are inserted together. This should not have
        any application-facing effects.
+
+    If column is given, it restricts use to objects with that matching primary key.  If 'None' then
+    the existing primary key is used.
     """
 
     @sqlalchemy.event.listens_for(sqla_session, "before_flush")
