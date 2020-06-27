@@ -18,8 +18,8 @@ def _get_column_python_type(column):
     return column.type.python_type
 
 
-def _has_normal_id_primary_key(base_mapper):
-    """Check if the primary key for base_mapper is an auto-incrementing integer `id` column"""
+def _has_normal_id_primary_key(base_mapper, column="id"):
+    """Check if the primary key for base_mapper is an auto-incrementing integer column"""
     primary_key_cols = base_mapper.primary_key
     if len(primary_key_cols) != 1:
         return False
@@ -32,24 +32,24 @@ def _has_normal_id_primary_key(base_mapper):
         python_column_type = None
 
     return (
-        primary_key_col.name == "id"
+        primary_key_col.name == column
         and python_column_type == int
         and primary_key_col.autoincrement in ("auto", True)
         and primary_key_col.table == base_mapper.local_table
     )
 
 
-def _get_id_sequence_name(base_mapper):
+def _get_id_sequence_name(base_mapper, column="id"):
     assert _has_normal_id_primary_key(base_mapper), "_get_id_sequence_name only supports id primary keys"
-    return "%s_id_seq" % base_mapper.entity.__tablename__
+    return "%s_%s_seq" % (base_mapper.entity.__tablename__, column)
 
 
 def tuples_to_scalar_list(tuples):
     return [scalar for [scalar] in tuples]
 
 
-def _get_next_sequence_values(session, base_mapper, num_values):
-    """Fetches the next `num_values` ids from the `id` sequence on the `base_mapper` table.
+def _get_next_sequence_values(session, base_mapper, num_values, column="id"):
+    """Fetches the next `num_values` ids from the sequence on the `base_mapper` table.
 
     For example, if the next id in the `model_id_seq` sequence is 12, then
     `_get_next_sequence_values(session, Model.__mapper__, 5)` will return [12, 13, 14, 15, 16].
@@ -58,7 +58,7 @@ def _get_next_sequence_values(session, base_mapper, num_values):
         base_mapper
     ), "_get_next_sequence_values assumes that the sequence produces integer values"
 
-    id_seq_name = _get_id_sequence_name(base_mapper)
+    id_seq_name = _get_id_sequence_name(base_mapper, column=column)
     schema = base_mapper.entity.__table__.metadata.schema
     sequence = sqlalchemy.Sequence(id_seq_name, schema=schema)
 
@@ -134,7 +134,7 @@ def _group_insert_orders_by_class(new_models):
 
 
 def batch_populate_primary_keys(
-    session, new_models, skip_unsupported_models=False, skip_if_single_model=False
+    session, new_models, skip_unsupported_models=False, skip_if_single_model=False, column="id"
 ):
     """Query for and populate the primary keys for all models in new_models with integer `id` primary keys.
 
@@ -147,7 +147,7 @@ def batch_populate_primary_keys(
                                  additional query from performing the nextval query.
     """
     for base_mapper, models in _group_models_by_base_mapper(new_models):
-        if not _has_normal_id_primary_key(base_mapper):
+        if not _has_normal_id_primary_key(base_mapper, column=column):
             if skip_unsupported_models:
                 continue
             else:
@@ -155,19 +155,19 @@ def batch_populate_primary_keys(
 
         # In general, batch_populate_primary_keys shouldn't assume anything about how people are creating
         # models - it is possible for models to have their ids already specified.
-        models = [model for model in models if model.id is None]
+        models = [model for model in models if getattr(model, column) is None]
 
         if skip_if_single_model and len(models) <= 1:
             continue
 
-        new_ids = _get_next_sequence_values(session, base_mapper, len(models))
+        new_ids = _get_next_sequence_values(session, base_mapper, len(models), column=column)
 
         models = sorted(models, key=lambda model: sqlalchemy.inspect(model).insert_order)
         for id_, model in zip(new_ids, models):
-            model.id = id_
+            setattr(model, column, id_)
 
 
-def enable_batch_inserting(sqla_session):
+def enable_batch_inserting(sqla_session, column="id"):
     """Improve general performance when doing lots of inserts
 
     In summary, enabling this will enable SQLAlchemy to group similar INSERT statements together,
@@ -202,7 +202,7 @@ def enable_batch_inserting(sqla_session):
 
         # First, populate the primary keys using the original insert_orders.
         batch_populate_primary_keys(
-            session, new_models, skip_unsupported_models=True, skip_if_single_model=True
+            session, new_models, skip_unsupported_models=True, skip_if_single_model=True, column=column
         )
 
         # Then, rewrite the insert_orders so objects of the same type are grouped together.
