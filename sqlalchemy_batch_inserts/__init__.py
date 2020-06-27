@@ -40,7 +40,7 @@ def _has_normal_id_primary_key(base_mapper, column="id"):
 
 
 def _get_id_sequence_name(base_mapper, column="id"):
-    assert _has_normal_id_primary_key(base_mapper), "_get_id_sequence_name only supports id primary keys"
+    assert _has_normal_id_primary_key(base_mapper, column=column), f"_get_id_sequence_name only supports {column} primary keys"
     return "%s_%s_seq" % (base_mapper.entity.__tablename__, column)
 
 
@@ -55,7 +55,7 @@ def _get_next_sequence_values(session, base_mapper, num_values, column="id"):
     `_get_next_sequence_values(session, Model.__mapper__, 5)` will return [12, 13, 14, 15, 16].
     """
     assert _has_normal_id_primary_key(
-        base_mapper
+        base_mapper, column=column
     ), "_get_next_sequence_values assumes that the sequence produces integer values"
 
     id_seq_name = _get_id_sequence_name(base_mapper, column=column)
