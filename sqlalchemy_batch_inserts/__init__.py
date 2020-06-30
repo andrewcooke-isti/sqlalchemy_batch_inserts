@@ -20,7 +20,7 @@ def _get_column_python_type(column):
 
 def _has_tablename_attribute(base_mapper):
     """Check if the __tablename__ attribute is present (missing from automap generated classes)."""
-    return hasattr(base_mapper, '__tablename__')
+    return hasattr(base_mapper.entity, '__tablename__')
 
 
 def _has_normal_id_primary_key(base_mapper):
