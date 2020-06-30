@@ -18,6 +18,11 @@ def _get_column_python_type(column):
     return column.type.python_type
 
 
+def _has_tablename_attribute(base_mapper):
+    """Check if the __tablename__ attribute is present (missing from automap generated classes)."""
+    return hasattr(base_mapper, '__tablename__')
+
+
 def _has_normal_id_primary_key(base_mapper):
     """Check if the primary key for base_mapper is an auto-incrementing integer `id` column"""
     primary_key_cols = base_mapper.primary_key
@@ -147,6 +152,13 @@ def batch_populate_primary_keys(
                                  additional query from performing the nextval query.
     """
     for base_mapper, models in _group_models_by_base_mapper(new_models):
+
+        if not _has_tablename_attribute(base_mapper):
+            if skip_unsupported_models:
+                continue
+            else:
+                raise AssertionError("Expected models to have __tablename__ attribute")
+
         if not _has_normal_id_primary_key(base_mapper):
             if skip_unsupported_models:
                 continue
